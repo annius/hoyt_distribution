@@ -1,4 +1,4 @@
-import numpt as np
+import numpy as np
 from scipy.special import gammainc
 
 
@@ -52,6 +52,25 @@ def cumulative_density_hoyt(s1, s2, x, tol=1e-6):
     # The mean of the root of the quadratic form is given by the sum of the variances.
     # See https://en.wikipedia.org/wiki/Quadratic_form_%28statistics%29#Expectation.
     omega = s1 * s1 + s2 * s2
+
+    # The variable q is the Hoyt/Nakagami-q fading parameter defined in Eq. (1) of [1].
+    # In Eq. (2.86) of [2] it is shown that q = sqrt(eta), where eta is the ratio of the smaller and larger variances.
+    q = np.min([s1, s2]) / np.max([s1, s2])
+    # Consequently, q2 is the square of q2.
+    q2 = q * q
+
+    # Eq. (6) of [1] can be used to determine how many terms are needed to reduce to the quadrature error to the specified tolerance.
+    n_terms = int(np.ceil(np.log(2/tol - 1) / np.log((1+q)/(1-q)) / 2)) 
+
+    cdfx = np.ones_like(x)
+    for k in range(n_terms):
+        # a, b, den are used to implement Eq. (5) in [1].
+        den = (1 + (1 - q2) / (1 + q2) * np.cos(np.pi * (2 * k + 1) / 2 / n_terms))
+        a = 2 * q / (n_terms) / (1 + q2) / den
+        b = (1 + q2)**2/4/q2 * den / omega    
+        cdfx -=  a * np.exp( -b * x**2)
+
+    return cdfx, n_terms
 
 
 
@@ -109,11 +128,8 @@ def cumulative_density_hoyt_series(s1, s2, x, tol=1e-6):
     # c[0] = beta / sqrt(l1 * l2), see Eq. (12).
     ck = 2 * s1 * s2 / (s1**2 + s2**2)
 
-    # Convenience variables.
+    # Convenience variable.
     xp = x**2 / (2 * beta)
-    xp2 = xp * xp
-    expmxp = np.exp(-xp)
-    expmxpxp = expmxp * xp
 
     # Start the iteration; the zeroth term is given by:
     #
@@ -142,25 +158,6 @@ def cumulative_density_hoyt_series(s1, s2, x, tol=1e-6):
         cdf += correction
         k += 1
     return cdf, k
-
-    # The variable q is the Hoyt/Nakagami-q fading parameter defined in Eq. (1) of [1].
-    # In Eq. (2.86) of [2] it is shown that q = sqrt(eta), where eta is the ratio of the smaller and larger variances.
-    q = np.min([s1, s2]) / np.max([s1, s2])
-    # Consequently, q2 is the square of q2.
-    q2 = q * q
-
-    # Eq. (6) of [1] can be used to determine how many terms are needed to reduce to the quadrature error to the specified tolerance.
-    n_terms = int(np.ceil(np.log(2/tol - 1) / np.log((1+q)/(1-q)) / 2)) 
-
-    cdfx = np.ones_like(x)
-    for k in range(n_terms):
-        # a, b, den are used to implement Eq. (5) in [1].
-        den = (1 + (1 - q2) / (1 + q2) * np.cos(np.pi * (2 * k + 1) / 2 / n_terms))
-        a = 2 * q / (n_terms) / (1 + q2) / den
-        b = (1 + q2)**2/4/q2 * den / omega    
-        cdfx -=  a * np.exp( -b * x**2)
-
-    return cdfx, n_terms
 
 
 def inverse_tail_probability_hoyt(s1, s2, probability, tol=1e-6, n_max=None, log=False):
